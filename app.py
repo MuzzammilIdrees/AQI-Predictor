@@ -964,7 +964,8 @@ def main():
         st.markdown("### 📊 Model Performance Over Time")
         st.caption("Track how model accuracy changes with each training run")
         
-        metrics_store = MetricsStore(settings.metrics_history_path)
+        metrics_path = getattr(settings, 'metrics_history_path', Path("reports/metrics_history.csv"))
+        metrics_store = MetricsStore(metrics_path)
         metrics_df = metrics_store.load()
         
         if metrics_df is not None and not metrics_df.empty:
