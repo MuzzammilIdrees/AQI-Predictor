@@ -64,12 +64,21 @@ jobs:
         run: |
           mkdir -p data
           mkdir -p models
+          mkdir -p reports
       
       - name: Download features
         uses: actions/download-artifact@v4
         with:
           name: features
           path: data
+      
+      # Try to restore previous metrics history (may not exist on first run)
+      - name: Download previous metrics history
+        uses: actions/download-artifact@v4
+        with:
+          name: metrics-history
+          path: reports
+        continue-on-error: true
       
       - name: Install dependencies
         run: |
@@ -78,6 +87,15 @@ jobs:
       
       - name: Train model
         run: python scripts/run_training_job.py
+      
+      - name: Display metrics history
+        run: |
+          echo "=== Metrics History ==="
+          if [ -f "reports/metrics_history.csv" ]; then
+            cat reports/metrics_history.csv
+          else
+            echo "No metrics history yet (first run)"
+          fi
       
       - name: Verify model files exist
         run: |
@@ -98,4 +116,11 @@ jobs:
             models/latest_shap.pkl
           if-no-files-found: error
           retention-days: 30
-
+      
+      - name: Upload metrics history
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics-history
+          path: reports/metrics_history.csv
+          if-no-files-found: warn
+          retention-days: 90

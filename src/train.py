@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from src.config import settings
 from src.feature_engineering import get_feature_columns
+from src.metrics_store import MetricsStore
 
 # Import deep learning models (optional - graceful degradation if TensorFlow not available)
 try:
@@ -137,6 +138,16 @@ def train_models(df: pd.DataFrame) -> TrainResult:
     }
     with open(settings.shap_path, "wb") as f:
         pickle.dump(shap_payload, f)
+
+    # Log metrics to history for tracking over time
+    metrics_store = MetricsStore(settings.metrics_history_path)
+    metrics_store.log(
+        model_name=best_name,
+        metrics=best_metrics,
+        sample_count=len(X),
+        feature_count=len(feature_cols),
+    )
+    print(f"  Metrics logged to {settings.metrics_history_path}")
 
     return TrainResult(
         model_name=best_name,

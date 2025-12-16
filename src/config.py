@@ -7,6 +7,7 @@ class Settings:
     feature_store_path: Path = Path("data/features.csv")
     model_path: Path = Path("models/latest_model.pkl")
     shap_path: Path = Path("models/latest_shap.pkl")
+    metrics_history_path: Path = Path("reports/metrics_history.csv")
     default_city: str = "Delhi"
     # City coordinates for quick use; extend as needed.
     city_coords: dict = None

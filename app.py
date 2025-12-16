@@ -17,6 +17,7 @@ from src.config import settings
 from src.data_fetch import fetch_air_quality
 from src.feature_engineering import build_features
 from src.feature_store import FeatureStore
+from src.metrics_store import MetricsStore
 from src.predict import load_model, load_shap, predict, tag_hazard, top_shap_contributors, get_lime_explanation
 from src.train import train_models
 
@@ -574,6 +575,81 @@ def create_shap_chart(top_feats: list) -> go.Figure:
     return fig
 
 
+def create_metrics_history_chart(metrics_df: pd.DataFrame) -> go.Figure:
+    """Create a chart showing model metrics over time."""
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=('RMSE & MAE Over Time', 'R² Score Over Time'),
+        vertical_spacing=0.15,
+        shared_xaxes=True
+    )
+    
+    # RMSE line
+    fig.add_trace(
+        go.Scatter(
+            x=metrics_df['timestamp'],
+            y=metrics_df['rmse'],
+            name='RMSE',
+            mode='lines+markers',
+            line=dict(color='#e74c3c', width=2),
+            marker=dict(size=8),
+            hovertemplate='<b>%{x}</b><br>RMSE: %{y:.2f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # MAE line
+    fig.add_trace(
+        go.Scatter(
+            x=metrics_df['timestamp'],
+            y=metrics_df['mae'],
+            name='MAE',
+            mode='lines+markers',
+            line=dict(color='#3498db', width=2),
+            marker=dict(size=8),
+            hovertemplate='<b>%{x}</b><br>MAE: %{y:.2f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    # R² line
+    fig.add_trace(
+        go.Scatter(
+            x=metrics_df['timestamp'],
+            y=metrics_df['r2'],
+            name='R² Score',
+            mode='lines+markers',
+            line=dict(color='#2ecc71', width=2),
+            marker=dict(size=8),
+            fill='tozeroy',
+            fillcolor='rgba(46, 204, 113, 0.2)',
+            hovertemplate='<b>%{x}</b><br>R²: %{y:.3f}<extra></extra>'
+        ),
+        row=2, col=1
+    )
+    
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(30,30,46,0.6)',
+        font=dict(color='#e0e0e0'),
+        height=500,
+        margin=dict(l=60, r=20, t=60, b=40),
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='right',
+            x=1
+        ),
+        hovermode='x unified'
+    )
+    
+    fig.update_xaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True)
+    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True)
+    
+    return fig
+
+
 # ============================================================================
 # Main Application
 # ============================================================================
@@ -691,7 +767,7 @@ def main():
     st.markdown("<br>", unsafe_allow_html=True)
     
     # ========== Tabs for Different Views ==========
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Forecast", "🏥 Health Advisory", "🔬 SHAP Analysis", "📋 Data"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Forecast", "🏥 Health Advisory", "🔬 SHAP Analysis", "📋 Data", "📊 Model Metrics"])
     
     # ----- TAB 1: Forecast -----
     with tab1:
@@ -882,6 +958,90 @@ def main():
         if show_raw_data:
             st.markdown("#### Raw Sensor Data")
             st.dataframe(raw.tail(48), use_container_width=True, hide_index=True)
+    
+    # ----- TAB 5: Model Metrics -----
+    with tab5:
+        st.markdown("### 📊 Model Performance Over Time")
+        st.caption("Track how model accuracy changes with each training run")
+        
+        metrics_store = MetricsStore(settings.metrics_history_path)
+        metrics_df = metrics_store.load()
+        
+        if metrics_df is not None and not metrics_df.empty:
+            # Summary stats
+            summary = metrics_store.get_summary_stats()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Runs", summary['total_runs'])
+            with col2:
+                st.metric("Best RMSE", f"{summary['best_rmse']:.2f}")
+            with col3:
+                st.metric("Best R²", f"{summary['best_r2']:.3f}")
+            with col4:
+                st.metric("Best Model", summary['most_common_model'] or 'N/A')
+            
+            st.markdown("---")
+            
+            # Trend indicators
+            rmse_trend = metrics_store.get_trend('rmse')
+            r2_trend = metrics_store.get_trend('r2')
+            
+            if rmse_trend or r2_trend:
+                trend_col1, trend_col2 = st.columns(2)
+                with trend_col1:
+                    trend_emoji = "📈" if rmse_trend == "degrading" else "📉" if rmse_trend == "improving" else "➡️"
+                    trend_color = "red" if rmse_trend == "degrading" else "green" if rmse_trend == "improving" else "gray"
+                    st.markdown(f"**RMSE Trend:** {trend_emoji} <span style='color:{trend_color}'>{rmse_trend or 'N/A'}</span>", unsafe_allow_html=True)
+                with trend_col2:
+                    trend_emoji = "📈" if r2_trend == "improving" else "📉" if r2_trend == "degrading" else "➡️"
+                    trend_color = "green" if r2_trend == "improving" else "red" if r2_trend == "degrading" else "gray"
+                    st.markdown(f"**R² Trend:** {trend_emoji} <span style='color:{trend_color}'>{r2_trend or 'N/A'}</span>", unsafe_allow_html=True)
+            
+            # Metrics chart
+            st.plotly_chart(create_metrics_history_chart(metrics_df), use_container_width=True)
+            
+            # Metrics table
+            with st.expander("📋 View All Training Runs"):
+                display_metrics = metrics_df.copy()
+                display_metrics['timestamp'] = pd.to_datetime(display_metrics['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
+                display_metrics = display_metrics.rename(columns={
+                    'timestamp': 'Training Time',
+                    'model_name': 'Model',
+                    'rmse': 'RMSE',
+                    'mae': 'MAE',
+                    'r2': 'R²',
+                    'sample_count': 'Samples',
+                    'feature_count': 'Features'
+                })
+                st.dataframe(display_metrics.sort_values('Training Time', ascending=False), use_container_width=True, hide_index=True)
+                
+                # Download button
+                csv = metrics_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Metrics History",
+                    data=csv,
+                    file_name=f"model_metrics_history.csv",
+                    mime="text/csv"
+                )
+        else:
+            st.info("""
+            📊 **No metrics history available yet**
+            
+            Metrics will be recorded after the first model training run.
+            Run the pipeline or trigger a manual training to start tracking.
+            """)
+            
+            if st.button("🔄 Run Training Now", use_container_width=True):
+                with st.spinner("Training model..."):
+                    store = FeatureStore(settings.feature_store_path)
+                    df = store.load()
+                    if df is not None and not df.empty:
+                        train_models(df)
+                        st.success("✅ Training complete! Refresh to see metrics.")
+                        st.rerun()
+                    else:
+                        st.error("No feature data available. Run feature ingestion first.")
     
     # ========== Footer ==========
     st.markdown("""
