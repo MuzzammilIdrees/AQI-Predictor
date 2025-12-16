@@ -5,6 +5,9 @@ on:
     - cron: "0 */6 * * *"   # every 6 hours (reduced frequency to avoid rate limits)
   workflow_dispatch:        # manual trigger
 
+permissions:
+  contents: write
+
 env:
   PYTHONPATH: ${{ github.workspace }}
 
@@ -127,3 +130,12 @@ jobs:
           path: reports/metrics_history.csv
           if-no-files-found: warn
           retention-days: 90
+      
+      # Commit metrics back to repository so Streamlit Cloud can access them
+      - name: Commit metrics to repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add reports/metrics_history.csv || true
+          git diff --staged --quiet || git commit -m "chore: update metrics history [skip ci]"
+          git push || echo "Nothing to push"
