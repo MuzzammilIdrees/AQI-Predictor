@@ -30,8 +30,14 @@ jobs:
       - name: Create data directory
         run: mkdir -p data
       
-      - name: Run feature ingestion
-        run: python scripts/run_feature_job.py --city "Delhi"
+      - name: Run feature ingestion for Pakistan cities
+        run: |
+          cities=("Karachi" "Lahore" "Islamabad" "Rawalpindi" "Faisalabad" "Multan" "Peshawar" "Quetta" "Sialkot" "Gujranwala" "Hyderabad" "Bahawalpur" "Sargodha" "Sukkur" "Larkana" "Sheikhupura" "Mirpur Khas" "Rahim Yar Khan" "Gujrat" "Jhang")
+          for city in "${cities[@]}"; do
+            echo "Fetching data for $city..."
+            python scripts/run_feature_job.py --city "$city" || echo "Warning: Failed to fetch $city, continuing..."
+            sleep 1  # Rate limiting
+          done
         continue-on-error: false
       
       - name: Verify features file exists
