@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.pkl
+data/*.parquet
+models/*.pkl
+models/*.shap
+
+# Keep structure
+!data/.gitkeep
+!models/.gitkeep
+
+# Streamlit
+.streamlit/
+
