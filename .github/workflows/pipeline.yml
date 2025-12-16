@@ -1,0 +1,101 @@
+name: aqi-pipeline
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours (reduced frequency to avoid rate limits)
+  workflow_dispatch:        # manual trigger
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  feature_job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create data directory
+        run: mkdir -p data
+      
+      - name: Run feature ingestion
+        run: python scripts/run_feature_job.py --city "Delhi"
+        continue-on-error: false
+      
+      - name: Verify features file exists
+        run: |
+          if [ -f "data/features.csv" ]; then
+            echo "Features file created successfully"
+            wc -l data/features.csv
+          else
+            echo "ERROR: Features file not created!"
+            exit 1
+          fi
+      
+      - name: Upload features
+        uses: actions/upload-artifact@v4
+        with:
+          name: features
+          path: data/features.csv
+          if-no-files-found: error
+          retention-days: 7
+
+  train_job:
+    needs: feature_job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+      
+      - name: Create directories
+        run: |
+          mkdir -p data
+          mkdir -p models
+      
+      - name: Download features
+        uses: actions/download-artifact@v4
+        with:
+          name: features
+          path: data
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Train model
+        run: python scripts/run_training_job.py
+      
+      - name: Verify model files exist
+        run: |
+          if [ -f "models/latest_model.pkl" ]; then
+            echo "Model file created successfully"
+            ls -la models/
+          else
+            echo "ERROR: Model file not created!"
+            exit 1
+          fi
+      
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model
+          path: |
+            models/latest_model.pkl
+            models/latest_shap.pkl
+          if-no-files-found: error
+          retention-days: 30
+
