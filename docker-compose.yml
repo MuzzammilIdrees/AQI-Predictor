@@ -1,0 +1,93 @@
+# =============================================================================
+# Docker Compose - AQI Predictor Services
+# =============================================================================
+# Usage:
+#   docker-compose up          # Start all services
+#   docker-compose up api      # Start only FastAPI
+#   docker-compose up dashboard # Start only Streamlit
+#   docker-compose down        # Stop all services
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # FastAPI Service - REST API for predictions
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aqi-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - aqi-network
+
+  # ---------------------------------------------------------------------------
+  # Streamlit Dashboard - Interactive UI
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: aqi-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - aqi-network
+
+  # ---------------------------------------------------------------------------
+  # Prefect Worker - Runs orchestration flows (optional)
+  # ---------------------------------------------------------------------------
+  prefect-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aqi-prefect
+    command: ["python", "-m", "flows.aqi_pipeline", "--flow", "full"]
+    environment:
+      - PYTHONPATH=/app
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+    profiles:
+      - prefect  # Only start with: docker-compose --profile prefect up
+    networks:
+      - aqi-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  aqi-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes (persistent data)
+# =============================================================================
+volumes:
+  aqi-data:
+  aqi-models:

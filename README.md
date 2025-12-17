@@ -1,64 +1,279 @@
-# AQI Predictor (local-ready)
+# 🌬️ AQI Predictor
 
-End-to-end pipeline to fetch air-quality forecasts, build features, train a model, and serve 3‑day AQI predictions via Streamlit. Data source uses the free Open-Meteo Air Quality API (no API key). The app is designed for local/container deployment.
+[![CI/CD Pipeline](https://github.com/MuzzammilIdrees/AQI-Predictor/actions/workflows/pipeline.yml/badge.svg)](https://github.com/MuzzammilIdrees/AQI-Predictor/actions)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io/)
 
-## Quickstart
-- Python 3.10+ recommended.
-- Create a virtual env, then install deps: `pip install -r requirements.txt`.
-- Run a fast smoke: `python scripts/backfill.py --city "Delhi" --days 15` then `python scripts/run_training_job.py`.
-- Serve locally: `streamlit run app.py`.
+A full-stack ML Engineering system for Air Quality Index (AQI) prediction, featuring real-time predictions, automated pipelines, and production-grade deployment.
 
-## Project layout
-- `app.py` — Streamlit UI, live fetch + 3-day forecast, hazard alerts, SHAP explanations.
-- `src/data_fetch.py` — pulls hourly air-quality + weather from Open-Meteo.
-- `src/feature_engineering.py` — builds time and trend features, targets.
-- `src/feature_store.py` — simple parquet-backed feature store (serverless friendly).
-- `src/train.py` — trains/evaluates models (RandomForestRegressor baseline + Ridge).
-- `src/predict.py` — loads model, makes forecasts, hazard tagging.
-- `scripts/backfill.py` — backfills historical data for training.
-- `scripts/run_feature_job.py` — one-off feature ingest (for cron/GitHub Actions).
-- `scripts/run_training_job.py` — daily training job (for cron/GitHub Actions).
-- `.github/workflows/pipeline.yml` — example CI that runs feature + training jobs on schedules.
-- `Dockerfile` — container for the app (run locally or on any container host).
+## 📋 Table of Contents
 
-## Minimal usage flow
-1) Backfill features/targets  
-`python scripts/backfill.py --city "Delhi" --days 30`
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Quick Start](#-quick-start)
+- [API Documentation](#-api-documentation)
+- [Prefect Orchestration](#-prefect-orchestration)
+- [Testing](#-testing)
+- [Docker Deployment](#-docker-deployment)
+- [CI/CD Pipeline](#-cicd-pipeline)
+- [Supported Cities](#-supported-cities)
 
-2) Train + evaluate  
-`python scripts/run_training_job.py`
+## ✨ Features
 
-3) Serve the app  
-`streamlit run app.py`
+| Feature | Description |
+|---------|-------------|
+| **FastAPI REST API** | Real-time predictions via REST endpoints |
+| **Streamlit Dashboard** | Interactive visualization and forecasting |
+| **Prefect Orchestration** | Automated ML pipeline with retry logic |
+| **DeepChecks Testing** | Automated ML model validation |
+| **Docker Compose** | Multi-service containerization |
+| **CI/CD Pipeline** | Automated testing, training, and deployment |
+| **20 Pakistan Cities** | Full coverage of major Pakistani cities |
 
-## Local deployment
-- Run locally: `streamlit run app.py` (after backfill + training).
-- Container: `docker build -t aqi-predictor .` then `docker run -p 8501:8501 aqi-predictor`.
+## 🏗️ Architecture
 
-## CI/CD (serverless-friendly)
-- GitHub Actions workflow (`pipeline.yml`) runs hourly feature job and daily training job. Adjust cron as needed.
-- Jobs persist artifacts (`data/features.parquet`, `models/latest_model.pkl`) via workflow artifacts; swap with S3/Hub storage if desired.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub Actions CI/CD                      │
+│  ┌─────────┐  ┌────────┐  ┌────────┐  ┌────────┐  ┌───────┐ │
+│  │  Lint   │→ │  Test  │→ │ Ingest │→ │ Train  │→ │ Build │ │
+│  └─────────┘  └────────┘  └────────┘  └────────┘  └───────┘ │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    Docker Compose                            │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐  │
+│  │   FastAPI API   │  │    Streamlit    │  │   Prefect   │  │
+│  │    :8000        │  │     :8501       │  │   Worker    │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## Models
-The system trains multiple models and selects the best one:
-- **Statistical models**: Ridge Regression, Lasso Regression
-- **Tree-based models**: Random Forest, Gradient Boosting
-- **Deep learning**: Multi-Layer Perceptron (MLP) Neural Network (requires TensorFlow)
+## 🚀 Quick Start
 
-All models are evaluated using RMSE, MAE, and R² metrics. The best model (lowest RMSE) is saved and used for predictions.
+### Prerequisites
+- Python 3.11+
+- Docker & Docker Compose (optional)
 
-## Feature importance
-- SHAP explainers are used for model interpretation:
-  - TreeExplainer for tree-based models (RF, GBR)
-  - LinearExplainer for linear models (Ridge, Lasso)
-  - KernelExplainer for neural networks (MLP)
-- App shows top features contributing to predictions.
+### Installation
 
-## Alerts
-- App raises badges when predicted AQI exceeds standard thresholds (100, 150, 200).
+```bash
+# Clone the repository
+git clone https://github.com/MuzzammilIdrees/AQI-Predictor.git
+cd AQI-Predictor
 
-## Notes / Extensibility
-- **Deep Learning**: Neural network models require TensorFlow. If TensorFlow is not available, the system gracefully falls back to traditional ML models (RF, Ridge, etc.).
-- Data source is forecast-based; if you prefer historical observed AQI, swap `data_fetch.fetch_air_quality()` with an API that returns observations (e.g., OpenAQ) — the feature interface stays the same.
-- Feature store uses CSV format for portability; replace with Hopsworks/Vertex AI Feature Store by re-implementing `FeatureStore` methods.
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Run Services
+
+```bash
+# Run FastAPI server
+uvicorn api.main:app --reload --port 8000
+
+# Run Streamlit dashboard (in another terminal)
+streamlit run app.py
+
+# Or use Docker Compose
+docker-compose up
+```
+
+## 📡 API Documentation
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | API information |
+| `GET` | `/health` | Health check |
+| `GET` | `/model/info` | Model metadata |
+| `POST` | `/predict` | Single city prediction |
+| `POST` | `/predict/batch` | Multiple cities prediction |
+| `POST` | `/predict/features` | Direct feature prediction |
+| `POST` | `/predict/file` | CSV file upload |
+
+### Example Request
+
+```bash
+# Single city prediction
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"city": "Lahore", "forecast_hours": 24}'
+
+# Batch prediction
+curl -X POST http://localhost:8000/predict/batch \
+  -H "Content-Type: application/json" \
+  -d '{"cities": ["Lahore", "Karachi", "Islamabad"], "forecast_hours": 48}'
+```
+
+### Interactive Docs
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## 🔄 Prefect Orchestration
+
+### Available Flows
+
+```python
+from flows.aqi_pipeline import full_pipeline_flow, data_ingestion_flow, training_flow
+
+# Run complete pipeline
+full_pipeline_flow()
+
+# Run individual flows
+data_ingestion_flow(cities=["Lahore", "Karachi"])
+training_flow()
+```
+
+### CLI Usage
+
+```bash
+# Run full pipeline
+python -m flows.aqi_pipeline --flow full
+
+# Run data ingestion only
+python -m flows.aqi_pipeline --flow ingest --cities Lahore Karachi
+
+# Run training only
+python -m flows.aqi_pipeline --flow train
+```
+
+### Flow Features
+- ✅ Automatic retries (3 attempts)
+- ✅ Error handling
+- ✅ Discord/Slack notifications
+- ✅ Task caching (1 hour)
+
+## 🧪 Testing
+
+### Run All Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=src --cov=api --cov-report=html
+
+# Run specific test files
+pytest tests/test_api.py -v
+pytest tests/test_model.py -v
+pytest tests/test_data_integrity.py -v
+```
+
+### Test Categories
+
+| Test File | Description |
+|-----------|-------------|
+| `test_api.py` | API endpoint tests |
+| `test_model.py` | Model prediction tests |
+| `test_data_integrity.py` | DeepChecks data validation |
+
+## 🐳 Docker Deployment
+
+### Using Docker Compose
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Start specific service
+docker-compose up api
+docker-compose up dashboard
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `api` | 8000 | FastAPI REST API |
+| `dashboard` | 8501 | Streamlit Dashboard |
+| `prefect-worker` | - | Prefect flow runner |
+
+## ⚙️ CI/CD Pipeline
+
+The GitHub Actions pipeline includes:
+
+```
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│   Lint   │ → │   Test   │ → │  Ingest  │ → │  Train   │ → │  Build   │
+│(flake8)  │   │(pytest)  │   │(20 cities)│   │(ML tests)│   │(Docker)  │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+```
+
+### Triggers
+- 🕐 Scheduled: Every 6 hours
+- 🔄 Manual: workflow_dispatch
+- 📝 On push to main
+- 🔀 On pull request
+
+## 🌍 Supported Cities
+
+### Pakistan (20 cities)
+| | | | |
+|---|---|---|---|
+| Karachi | Lahore | Islamabad | Rawalpindi |
+| Faisalabad | Multan | Peshawar | Quetta |
+| Sialkot | Gujranwala | Hyderabad | Bahawalpur |
+| Sargodha | Sukkur | Larkana | Sheikhupura |
+| Mirpur Khas | Rahim Yar Khan | Gujrat | Jhang |
+
+### International
+Delhi, New York, London, Beijing, Sydney
+
+## 📊 Model Performance
+
+| Metric | Value |
+|--------|-------|
+| RMSE | < 20 |
+| MAE | < 15 |
+| R² Score | > 0.85 |
+
+## 📁 Project Structure
+
+```
+aqi-predictor/
+├── api/                    # FastAPI application
+│   ├── main.py            # API endpoints
+│   └── schemas.py         # Pydantic models
+├── flows/                  # Prefect orchestration
+│   └── aqi_pipeline.py    # ML pipeline flows
+├── src/                    # Core ML logic
+│   ├── config.py          # Configuration
+│   ├── data_fetch.py      # Data fetching
+│   ├── feature_engineering.py
+│   ├── train.py           # Model training
+│   └── predict.py         # Predictions
+├── tests/                  # Test suite
+│   ├── test_api.py
+│   ├── test_model.py
+│   └── test_data_integrity.py
+├── .github/workflows/      # CI/CD
+├── docker-compose.yml      # Container orchestration
+├── Dockerfile              # FastAPI container
+├── Dockerfile.streamlit    # Dashboard container
+├── app.py                  # Streamlit app
+└── requirements.txt        # Dependencies
+```
+
+## 📝 License
+
+MIT License
+
+## 👤 Author
+
+**Muzzammil Idrees**
+
+- GitHub: [@MuzzammilIdrees](https://github.com/MuzzammilIdrees)
